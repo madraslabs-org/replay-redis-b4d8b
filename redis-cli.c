@@ -103,8 +103,7 @@ static struct redisCommand cmdTable[] = {
     {"flushdb",1,REDIS_CMD_INLINE|REDIS_CMD_RETCODEREPLY},
     {"flushall",1,REDIS_CMD_INLINE|REDIS_CMD_RETCODEREPLY},
     {"sort",-2,REDIS_CMD_INLINE|REDIS_CMD_MULTIBULKREPLY},
-    {"info",1,REDIS_CMD_INLINE|REDIS_CMD_BULKREPLY},
-    {"mget",-2,REDIS_CMD_INLINE|REDIS_CMD_MULTIBULKREPLY},
+    {"version",1,REDIS_CMD_INLINE|REDIS_CMD_SINGLELINEREPLY},
     {NULL,0,0}
 };
 
@@ -224,7 +223,7 @@ static int cliSendCommand(int argc, char **argv) {
     }
 
     if ((rc->arity > 0 && argc != rc->arity) ||
-        (rc->arity < 0 && argc < -rc->arity)) {
+        (rc->arity < 0 && argc < rc->arity)) {
             fprintf(stderr,"Wrong number of arguments for '%s'\n",rc->name);
             return 1;
     }
