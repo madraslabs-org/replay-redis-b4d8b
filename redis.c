@@ -171,7 +171,6 @@ struct redisServer {
     int maxidletime;
     int dbnum;
     int daemonize;
-    char *pidfile;
     int bgsaveinprogress;
     struct saveparam *saveparams;
     int saveparamslen;
@@ -282,7 +281,6 @@ static void flushallCommand(redisClient *c);
 static void sortCommand(redisClient *c);
 static void lremCommand(redisClient *c);
 static void infoCommand(redisClient *c);
-static void mgetCommand(redisClient *c);
 
 /*================================= Globals ================================= */
 
@@ -296,7 +294,6 @@ static struct redisCommand cmdTable[] = {
     {"exists",existsCommand,2,REDIS_CMD_INLINE},
     {"incr",incrCommand,2,REDIS_CMD_INLINE},
     {"decr",decrCommand,2,REDIS_CMD_INLINE},
-    {"mget",mgetCommand,-2,REDIS_CMD_INLINE},
     {"rpush",rpushCommand,3,REDIS_CMD_BULK},
     {"lpush",lpushCommand,3,REDIS_CMD_BULK},
     {"rpop",rpopCommand,2,REDIS_CMD_INLINE},
@@ -716,7 +713,6 @@ static void initServerConfig() {
     server.bindaddr = NULL;
     server.glueoutputbuf = 1;
     server.daemonize = 0;
-    server.pidfile = "/var/run/redis.pid";
     server.dbfilename = "dump.rdb";
     ResetServerSaveParams();
 
@@ -880,8 +876,6 @@ static void loadServerConfig(char *filename) {
             else {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
             }
-        } else if (!strcmp(argv[0],"pidfile") && argc == 2) {
-          server.pidfile = zstrdup(argv[1]);
         } else {
             err = "Bad directive or wrong number of arguments"; goto loaderr;
         }
@@ -1702,29 +1696,6 @@ static void getCommand(redisClient *c) {
     }
 }
 
-static void mgetCommand(redisClient *c) {
-    dictEntry *de;
-    int j;
-  
-    addReplySds(c,sdscatprintf(sdsempty(),"%d\r\n",c->argc-1));
-    for (j = 1; j < c->argc; j++) {
-        de = dictFind(c->dict,c->argv[j]);
-        if (de == NULL) {
-            addReply(c,shared.minus1);
-        } else {
-            robj *o = dictGetEntryVal(de);
-            
-            if (o->type != REDIS_STRING) {
-                addReply(c,shared.minus1);
-            } else {
-                addReplySds(c,sdscatprintf(sdsempty(),"%d\r\n",(int)sdslen(o->ptr)));
-                addReply(c,o);
-                addReply(c,shared.crlf);
-            }
-        }
-    }
-}
-
 static void incrDecrCommand(redisClient *c, int incr) {
     dictEntry *de;
     long long value;
@@ -1903,9 +1874,6 @@ static void bgsaveCommand(redisClient *c) {
 static void shutdownCommand(redisClient *c) {
     redisLog(REDIS_WARNING,"User requested shutdown, saving DB...");
     if (saveDb(server.dbfilename) == REDIS_OK) {
-        if (server.daemonize) {
-          unlink(server.pidfile);
-        }
         redisLog(REDIS_WARNING,"Server exit now, bye bye...");
         exit(1);
     } else {
@@ -2822,7 +2790,6 @@ static void infoCommand(redisClient *c) {
     );
     addReplySds(c,sdscatprintf(sdsempty(),"%d\r\n",sdslen(info)));
     addReplySds(c,info);
-    addReply(c,shared.crlf);
 }
 
 /* =============================== Replication  ============================= */
@@ -3040,7 +3007,7 @@ static void daemonize(void) {
         if (fd > STDERR_FILENO) close(fd);
     }
     /* Try to write the pid file */
-    fp = fopen(server.pidfile,"w");
+    fp = fopen("/var/run/redis.pid","w");
     if (fp) {
         fprintf(fp,"%d\n",getpid());
         fclose(fp);
@@ -3063,7 +3030,7 @@ int main(int argc, char **argv) {
         redisLog(REDIS_NOTICE,"DB loaded from disk");
     if (aeCreateFileEvent(server.el, server.fd, AE_READABLE,
         acceptHandler, NULL, NULL) == AE_ERR) oom("creating file event");
-    redisLog(REDIS_NOTICE,"The server is now ready to accept connections on port %d", server.port);
+    redisLog(REDIS_NOTICE,"The server is now ready to accept connections");
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
     return 0;
